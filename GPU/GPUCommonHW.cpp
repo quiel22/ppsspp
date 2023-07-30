@@ -981,8 +981,10 @@ void GPUCommonHW::Execute_Prim(u32 op, u32 diff) {
 
 	uint32_t vertTypeID = GetVertTypeID(vertexType, gstate.getUVGenMode(), g_Config.bSoftwareSkinning);
 
+#define MAX_CULL_CHECK_COUNT 8
+
 	// If certain conditions are true, do frustum culling.
-	bool passCulling = (vertexType & GE_VTYPE_THROUGH_MASK) || count > 6;
+	bool passCulling = (vertexType & GE_VTYPE_THROUGH_MASK) || count > MAX_CULL_CHECK_COUNT;
 	if (!passCulling) {
 		// Do software culling.
 		if (drawEngineCommon_->TestBoundingBox(verts, inds, count, vertexType)) {
@@ -993,6 +995,9 @@ void GPUCommonHW::Execute_Prim(u32 op, u32 diff) {
 	}
 	if (passCulling) {
 		drawEngineCommon_->SubmitPrim(verts, inds, prim, count, vertTypeID, cullMode, &bytesRead);
+	} else {
+		// Still need to advance bytesRead.
+		drawEngineCommon_->SkipPrim(prim, count, vertTypeID, &bytesRead);
 	}
 
 	// After drawing, we advance the vertexAddr (when non indexed) or indexAddr (when indexed).
@@ -1038,7 +1043,21 @@ void GPUCommonHW::Execute_Prim(u32 op, u32 diff) {
 				inds = Memory::GetPointerUnchecked(gstate_c.indexAddr);
 			}
 
-			drawEngineCommon_->SubmitPrim(verts, inds, newPrim, count, vertTypeID, cullMode, &bytesRead);
+			bool passCulling = (vertexType & GE_VTYPE_THROUGH_MASK) || count > MAX_CULL_CHECK_COUNT;
+			if (!passCulling) {
+				// Do software culling.
+				if (drawEngineCommon_->TestBoundingBox(verts, inds, count, vertexType)) {
+					passCulling = true;
+				} else {
+					gpuStats.numCulledDraws++;
+				}
+			}
+			if (passCulling) {
+				drawEngineCommon_->SubmitPrim(verts, inds, prim, count, vertTypeID, cullMode, &bytesRead);
+			} else {
+				// Still need to advance bytesRead.
+				drawEngineCommon_->SkipPrim(prim, count, vertTypeID, &bytesRead);
+			}
 			AdvanceVerts(vertexType, count, bytesRead);
 			totalVertCount += count;
 			break;

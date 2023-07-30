@@ -791,6 +791,31 @@ uint64_t DrawEngineCommon::ComputeHash() {
 	return fullhash;
 }
 
+void DrawEngineCommon::SkipPrim(GEPrimitiveType prim, int vertexCount, u32 vertTypeID, int *bytesRead) {
+	if (!indexGen.PrimCompatible(prevPrim_, prim) || numDrawCalls_ >= MAX_DEFERRED_DRAW_CALLS || vertexCountInDrawCalls_ + vertexCount > VERTEX_BUFFER_MAX) {
+		DispatchFlush();
+	}
+
+	// This isn't exactly right, if we flushed, since prims can straddle previous calls.
+	// But it generally works for common usage.
+	if (prim == GE_PRIM_KEEP_PREVIOUS) {
+		// Has to be set to something, let's assume POINTS (0) if no previous.
+		if (prevPrim_ == GE_PRIM_INVALID)
+			prevPrim_ = GE_PRIM_POINTS;
+		prim = prevPrim_;
+	} else {
+		prevPrim_ = prim;
+	}
+
+	// If vtype has changed, setup the vertex decoder.
+	if (vertTypeID != lastVType_ || !dec_) {
+		dec_ = GetVertexDecoder(vertTypeID);
+		lastVType_ = vertTypeID;
+	}
+
+	*bytesRead = vertexCount * dec_->VertexSize();
+}
+
 // vertTypeID is the vertex type but with the UVGen mode smashed into the top bits.
 void DrawEngineCommon::SubmitPrim(const void *verts, const void *inds, GEPrimitiveType prim, int vertexCount, u32 vertTypeID, int cullMode, int *bytesRead) {
 	if (!indexGen.PrimCompatible(prevPrim_, prim) || numDrawCalls_ >= MAX_DEFERRED_DRAW_CALLS || vertexCountInDrawCalls_ + vertexCount > VERTEX_BUFFER_MAX) {

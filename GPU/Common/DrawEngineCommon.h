@@ -105,6 +105,8 @@ public:
 	bool TestBoundingBox(const void *control_points, const void *inds, int vertexCount, u32 vertType);
 
 	void SubmitPrim(const void *verts, const void *inds, GEPrimitiveType prim, int vertexCount, u32 vertTypeID, int cullMode, int *bytesRead);
+	void SkipPrim(GEPrimitiveType prim, int vertexCount, u32 vertTypeID, int *bytesRead);
+
 	template<class Surface>
 	void SubmitCurve(const void *control_points, const void *indices, Surface &surface, u32 vertType, int *bytesRead, const char *scope);
 	void ClearSplineBezierWeights();

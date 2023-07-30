@@ -2923,6 +2923,8 @@ bool TextureCacheCommon::PrepareBuildTexture(BuildTexturePlan &plan, TexCacheEnt
 
 	// Will be filled in again during decode.
 	entry->status &= ~TexCacheEntry::STATUS_ALPHA_MASK;
+
+	_dbg_assert_(plan.levelsToCreate >= plan.levelsToLoad);
 	return true;
 }
 
