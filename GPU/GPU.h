@@ -75,6 +75,7 @@ struct GPUStatistics {
 
 	void ResetFrame() {
 		numDrawCalls = 0;
+		numCulledDraws = 0;
 		numDrawSyncs = 0;
 		numListSyncs = 0;
 		numCachedDrawCalls = 0;
@@ -111,6 +112,7 @@ struct GPUStatistics {
 
 	// Per frame statistics
 	int numDrawCalls;
+	int numCulledDraws;
 	int numDrawSyncs;
 	int numListSyncs;
 	int numCachedDrawCalls;

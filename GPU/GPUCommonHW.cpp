@@ -980,7 +980,21 @@ void GPUCommonHW::Execute_Prim(u32 op, u32 diff) {
 	int cullMode = gstate.getCullMode();
 
 	uint32_t vertTypeID = GetVertTypeID(vertexType, gstate.getUVGenMode(), g_Config.bSoftwareSkinning);
-	drawEngineCommon_->SubmitPrim(verts, inds, prim, count, vertTypeID, cullMode, &bytesRead);
+
+	// If certain conditions are true, do frustum culling.
+	bool passCulling = (vertexType & GE_VTYPE_THROUGH_MASK) || count > 6;
+	if (!passCulling) {
+		// Do software culling.
+		if (drawEngineCommon_->TestBoundingBox(verts, inds, count, vertexType)) {
+			passCulling = true;
+		} else {
+			gpuStats.numCulledDraws++;
+		}
+	}
+	if (passCulling) {
+		drawEngineCommon_->SubmitPrim(verts, inds, prim, count, vertTypeID, cullMode, &bytesRead);
+	}
+
 	// After drawing, we advance the vertexAddr (when non indexed) or indexAddr (when indexed).
 	// Some games rely on this, they don't bother reloading VADDR and IADDR.
 	// The VADDR/IADDR registers are NOT updated.
@@ -1647,7 +1661,7 @@ size_t GPUCommonHW::FormatGPUStatsCommon(char *buffer, size_t size) {
 	float vertexAverageCycles = gpuStats.numVertsSubmitted > 0 ? (float)gpuStats.vertexGPUCycles / (float)gpuStats.numVertsSubmitted : 0.0f;
 	return snprintf(buffer, size,
 		"DL processing time: %0.2f ms, %d drawsync, %d listsync\n"
-		"Draw calls: %d, flushes %d, clears %d, bbox jumps %d (%d updates)\n"
+		"Draw calls: %d (%d culled), flushes %d, clears %d, bbox jumps %d (%d updates)\n"
 		"Cached draws: %d (tracked: %d)\n"
 		"Vertices: %d cached: %d uncached: %d\n"
 		"FBOs active: %d (evaluations: %d)\n"
@@ -1660,6 +1674,7 @@ size_t GPUCommonHW::FormatGPUStatsCommon(char *buffer, size_t size) {
 		gpuStats.numDrawSyncs,
 		gpuStats.numListSyncs,
 		gpuStats.numDrawCalls,
+		gpuStats.numCulledDraws,
 		gpuStats.numFlushes,
 		gpuStats.numClears,
 		gpuStats.numBBOXJumps,

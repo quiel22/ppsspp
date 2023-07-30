@@ -285,7 +285,13 @@ void DrawEngineCommon::UpdatePlanes() {
 //
 // It does the simplest and safest test possible: If all points of a bbox is outside a single of
 // our clipping planes, we reject the box. Tighter bounds would be desirable but would take more calculations.
+// The name is a slight misnomer, because any bounding shape will work, not just boxes.
 bool DrawEngineCommon::TestBoundingBox(const void *control_points, const void *inds, int vertexCount, u32 vertType) {
+	// Grab temp buffer space from large offsets in decoded_. Not exactly safe for large draws.
+	if (vertexCount > 1024) {
+		return true;
+	}
+
 	SimpleVertex *corners = (SimpleVertex *)(decoded_ + 65536 * 12);
 	float *verts = (float *)(decoded_ + 65536 * 18);
 
