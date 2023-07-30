@@ -286,7 +286,7 @@ void DrawEngineCommon::UpdatePlanes() {
 // It does the simplest and safest test possible: If all points of a bbox is outside a single of
 // our clipping planes, we reject the box. Tighter bounds would be desirable but would take more calculations.
 // The name is a slight misnomer, because any bounding shape will work, not just boxes.
-bool DrawEngineCommon::TestBoundingBox(const void *control_points, const void *inds, int vertexCount, u32 vertType) {
+bool DrawEngineCommon::TestBoundingBox(const void *vdata, const void *inds, int vertexCount, u32 vertType) {
 	// Grab temp buffer space from large offsets in decoded_. Not exactly safe for large draws.
 	if (vertexCount > 1024) {
 		return true;
@@ -303,39 +303,67 @@ bool DrawEngineCommon::TestBoundingBox(const void *control_points, const void *i
 	// Try to skip NormalizeVertices if it's pure positions. No need to bother with a vertex decoder
 	// and a large vertex format.
 	if ((vertType & 0xFFFFFF) == GE_VTYPE_POS_FLOAT && !inds) {
-		verts = (float *)control_points;
+		verts = (float *)vdata;
 	} else if ((vertType & 0xFFFFFF) == GE_VTYPE_POS_8BIT && !inds) {
-		const s8 *vtx = (const s8 *)control_points;
+		const s8 *vtx = (const s8 *)vdata;
 		for (int i = 0; i < vertexCount * 3; i++) {
 			verts[i] = vtx[i] * (1.0f / 128.0f);
 		}
 	} else if ((vertType & 0xFFFFFF) == GE_VTYPE_POS_16BIT && !inds) {
-		const s16 *vtx = (const s16 *)control_points;
+		const s16 *vtx = (const s16 *)vdata;
 		for (int i = 0; i < vertexCount * 3; i++) {
 			verts[i] = vtx[i] * (1.0f / 32768.0f);
 		}
 	} else {
 		// Simplify away indices, bones, and morph before proceeding.
 		u8 *temp_buffer = decoded_ + 65536 * 24;
-		int vertexSize = 0;
 
-		u16 indexLowerBound = 0;
-		u16 indexUpperBound = (u16)vertexCount - 1;
-		if (vertexCount > 0 && inds) {
-			GetIndexBounds(inds, vertexCount, vertType, &indexLowerBound, &indexUpperBound);
-		}
+		if ((inds || (vertType & (GE_VTYPE_WEIGHT_MASK | GE_VTYPE_MORPHCOUNT_MASK)))) {
+			u16 indexLowerBound = 0;
+			u16 indexUpperBound = (u16)vertexCount - 1;
 
-		// Force software skinning.
-		bool wasApplyingSkinInDecode = decOptions_.applySkinInDecode;
-		decOptions_.applySkinInDecode = true;
-		NormalizeVertices((u8 *)corners, temp_buffer, (const u8 *)control_points, indexLowerBound, indexUpperBound, vertType);
-		decOptions_.applySkinInDecode = wasApplyingSkinInDecode;
+			if (vertexCount > 0 && inds) {
+				GetIndexBounds(inds, vertexCount, vertType, &indexLowerBound, &indexUpperBound);
+			}
 
-		IndexConverter conv(vertType, inds);
-		for (int i = 0; i < vertexCount; i++) {
-			verts[i * 3] = corners[conv(i)].pos.x;
-			verts[i * 3 + 1] = corners[conv(i)].pos.y;
-			verts[i * 3 + 2] = corners[conv(i)].pos.z;
+			// Force software skinning.
+			bool wasApplyingSkinInDecode = decOptions_.applySkinInDecode;
+			decOptions_.applySkinInDecode = true;
+			NormalizeVertices((u8 *)corners, temp_buffer, (const u8 *)vdata, indexLowerBound, indexUpperBound, vertType);
+			decOptions_.applySkinInDecode = wasApplyingSkinInDecode;
+
+			IndexConverter conv(vertType, inds);
+			for (int i = 0; i < vertexCount; i++) {
+				verts[i * 3] = corners[conv(i)].pos.x;
+				verts[i * 3 + 1] = corners[conv(i)].pos.y;
+				verts[i * 3 + 2] = corners[conv(i)].pos.z;
+			}
+		} else {
+			// Simple, most common case.
+			VertexDecoder *dec = GetVertexDecoder(vertType);
+			int stride = dec->VertexSize();
+			int offset = dec->posoff;
+			switch (vertType & GE_VTYPE_POS_MASK) {
+			case GE_VTYPE_POS_8BIT:
+				for (int i = 0; i < vertexCount; i++) {
+					for (int j = 0; j < 3; j++) {
+						verts[i * 3 + j] = ((const s8 *)vdata + i * stride + offset)[j] * (1.0f / 128.0f);
+					}
+				}
+				break;
+			case GE_VTYPE_POS_16BIT:
+				for (int i = 0; i < vertexCount; i++) {
+					for (int j = 0; j < 3; j++) {
+						verts[i * 3 + j] = ((const s16 *)((const s8 *)vdata + i * stride + offset))[j] * (1.0f / 32768.0f);
+					}
+				}
+				break;
+			case GE_VTYPE_POS_FLOAT:
+				for (int i = 0; i < vertexCount; i++) {
+					memcpy(&verts[i * 3], (const u8 *)vdata + stride * i + offset, sizeof(float) * 3);
+				}
+				break;
+			}
 		}
 	}
 

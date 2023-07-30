@@ -983,7 +983,7 @@ void GPUCommonHW::Execute_Prim(u32 op, u32 diff) {
 
 #define MAX_CULL_CHECK_COUNT 6
 
-#define PASSES_CULLING ((vertexType & GE_VTYPE_THROUGH_MASK) || count > MAX_CULL_CHECK_COUNT)
+#define PASSES_CULLING ((vertexType & (GE_VTYPE_THROUGH_MASK | GE_VTYPE_MORPHCOUNT_MASK | GE_VTYPE_WEIGHT_MASK)) || count > MAX_CULL_CHECK_COUNT)
 
 	// If certain conditions are true, do frustum culling.
 	bool passCulling = PASSES_CULLING;
@@ -995,7 +995,12 @@ void GPUCommonHW::Execute_Prim(u32 op, u32 diff) {
 			gpuStats.numCulledDraws++;
 		}
 	}
+
+	// If the first one in a batch passes, let's assume the whole batch passes.
+	// Cuts down on checking, while not losing that much efficiency.
+	bool onePassed = false;
 	if (passCulling) {
+		onePassed = true;
 		drawEngineCommon_->SubmitPrim(verts, inds, prim, count, vertTypeID, cullMode, &bytesRead);
 	} else {
 		// Still need to advance bytesRead.
@@ -1045,7 +1050,7 @@ void GPUCommonHW::Execute_Prim(u32 op, u32 diff) {
 				inds = Memory::GetPointerUnchecked(gstate_c.indexAddr);
 			}
 
-			bool passCulling = PASSES_CULLING;
+			bool passCulling = onePassed || PASSES_CULLING;
 			if (!passCulling) {
 				// Do software culling.
 				if (drawEngineCommon_->TestBoundingBox(verts, inds, count, vertexType)) {
@@ -1056,6 +1061,8 @@ void GPUCommonHW::Execute_Prim(u32 op, u32 diff) {
 			}
 			if (passCulling) {
 				drawEngineCommon_->SubmitPrim(verts, inds, prim, count, vertTypeID, cullMode, &bytesRead);
+				// As soon as one passes, assume we don't need to check the rest of this batch.
+				onePassed = true;
 			} else {
 				// Still need to advance bytesRead.
 				drawEngineCommon_->SkipPrim(prim, count, vertTypeID, &bytesRead);
