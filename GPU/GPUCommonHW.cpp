@@ -1060,12 +1060,12 @@ void GPUCommonHW::Execute_Prim(u32 op, u32 diff) {
 				}
 			}
 			if (passCulling) {
-				drawEngineCommon_->SubmitPrim(verts, inds, prim, count, vertTypeID, cullMode, &bytesRead);
+				drawEngineCommon_->SubmitPrim(verts, inds, newPrim, count, vertTypeID, cullMode, &bytesRead);
 				// As soon as one passes, assume we don't need to check the rest of this batch.
 				onePassed = true;
 			} else {
 				// Still need to advance bytesRead.
-				drawEngineCommon_->SkipPrim(prim, count, vertTypeID, &bytesRead);
+				drawEngineCommon_->SkipPrim(newPrim, count, vertTypeID, &bytesRead);
 			}
 			AdvanceVerts(vertexType, count, bytesRead);
 			totalVertCount += count;
